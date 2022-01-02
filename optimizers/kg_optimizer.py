@@ -142,9 +142,10 @@ class KGOptimizer(object):
         counter = 0
         with torch.no_grad():
             while b_begin < examples.shape[0]:
+                # changed .cuda() to .cpu()
                 input_batch = examples[
                               b_begin:b_begin + self.batch_size
-                              ].cuda()
+                              ].cpu()
                 b_begin += self.batch_size
                 loss += self.calculate_loss(input_batch)
                 counter += 1
@@ -167,9 +168,10 @@ class KGOptimizer(object):
             total_loss = 0.0
             counter = 0
             while b_begin < examples.shape[0]:
+                # changed .cuda() to .cpu()
                 input_batch = actual_examples[
                               b_begin:b_begin + self.batch_size
-                              ].cuda()
+                              ].cpu()
 
                 # gradient step
                 l = self.calculate_loss(input_batch)

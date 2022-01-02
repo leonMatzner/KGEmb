@@ -82,9 +82,11 @@ class AttH(BaseH):
         self.context_vec.weight.data = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
         self.act = nn.Softmax(dim=1)
         if args.dtype == "double":
-            self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).double().cuda()
+            # replaced .cuda() with .cpu()
+            self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).double().cpu()
         else:
-            self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).cuda()
+            # replaced .cuda() with .cpu()
+            self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).cpu()
 
     def get_queries(self, queries):
         """Compute embedding and biases of queries."""

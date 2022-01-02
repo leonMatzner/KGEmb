@@ -135,7 +135,8 @@ class AttE(BaseE):
         # attention
         self.context_vec = nn.Embedding(self.sizes[1], self.rank)
         self.act = nn.Softmax(dim=1)
-        self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).cuda()
+        # replaced .cuda() with .cpu()
+        self.scale = torch.Tensor([1. / np.sqrt(self.rank)]).cpu()
 
     def get_reflection_queries(self, queries):
         lhs_ref_e = givens_reflection(
