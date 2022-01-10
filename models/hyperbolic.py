@@ -49,7 +49,8 @@ class RotH(BaseH):
         if self.multi_c:
             c = F.softplus(self.c[queries[:, 1]])
         else:
-            c = self.c[0]
+            c = F.softplus(self.c[0])
+        print(c)
         head = expmap0(self.entity(queries[:, 0]), c)
         rel1, rel2 = torch.chunk(self.rel(queries[:, 1]), 2, dim=1)
         rel1 = expmap0(rel1, c)
