@@ -50,7 +50,6 @@ class RotH(BaseH):
             c = F.softplus(self.c[queries[:, 1]])
         else:
             c = F.softplus(self.c[0])
-        print(c)
         head = expmap0(self.entity(queries[:, 0]), c)
         rel1, rel2 = torch.chunk(self.rel(queries[:, 1]), 2, dim=1)
         rel1 = expmap0(rel1, c)
@@ -69,7 +68,7 @@ class RefH(BaseH):
         if self.multi_c:
             c = F.softplus(self.c[queries[:, 1]])
         else:
-            c = self.c[0]
+            c = F.softplus(self.c[0])
         rel, _ = torch.chunk(self.rel(queries[:, 1]), 2, dim=1)
         rel = expmap0(rel, c)
         lhs = givens_reflection(self.rel_diag(queries[:, 1]), self.entity(queries[:, 0]))
@@ -100,7 +99,7 @@ class AttH(BaseH):
         if self.multi_c:
             c = F.softplus(self.c[queries[:, 1]])
         else:
-            c = self.c[0]
+            c = F.softplus(self.c[0])
         head = self.entity(queries[:, 0])
         rot_mat, ref_mat = torch.chunk(self.rel_diag(queries[:, 1]), 2, dim=1)
         rot_q = givens_rotations(rot_mat, head).view((-1, 1, self.rank))
