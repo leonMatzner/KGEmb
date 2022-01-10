@@ -123,8 +123,8 @@ def train(args):
     model = getattr(models, args.model)(args)
     total = count_params(model)
     logging.info("Total number of parameters {}".format(total))
-    # originally "cuda", set to "cpu", since cuda device unavailable
-    device = "cpu"
+    # replace cuda with cpu in order to use the cpu
+    device = "cuda"
     model.to(device)
 
     # get optimizer
@@ -159,8 +159,8 @@ def train(args):
                 best_epoch = step
                 logging.info("\t Saving model at epoch {} in {}".format(step, save_dir))
                 torch.save(model.cpu().state_dict(), os.path.join(save_dir, "model.pt"))
-                # changed from model.cuda() to model.cpu()
-                model.cpu()
+                # replace model.cuda() with model.cpu() in order to use the cpu
+                model.cuda()
             else:
                 counter += 1
                 if counter == args.patience:
@@ -177,8 +177,8 @@ def train(args):
     else:
         logging.info("\t Loading best model saved at epoch {}".format(best_epoch))
         model.load_state_dict(torch.load(os.path.join(save_dir, "model.pt")))
-    # replaced .cuda() with .cpu()
-    model.cpu()
+    # replace .cuda() with .cpu() to use the cpu
+    model.cuda()
     model.eval()
 
     # Validation metrics

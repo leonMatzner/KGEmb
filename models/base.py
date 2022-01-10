@@ -163,8 +163,8 @@ class KGModel(nn.Module, ABC):
             b_begin = 0
             candidates = self.get_rhs(queries, eval_mode=True)
             while b_begin < len(queries):
-                # replaced .cuda() with .cpu()
-                these_queries = queries[b_begin:b_begin + batch_size].cpu()
+                # replace .cuda() with .cpu() in order to switch cpu computation
+                these_queries = queries[b_begin:b_begin + batch_size].cuda()
 
                 q = self.get_queries(these_queries)
                 rhs = self.get_rhs(these_queries, eval_mode=False)
