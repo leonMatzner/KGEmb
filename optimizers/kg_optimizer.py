@@ -5,6 +5,9 @@ import torch.nn.functional as F
 import tqdm
 from torch import nn
 
+# For replacement of the torch optimizer
+import geoopt as geo
+
 
 class KGOptimizer(object):
     """Knowledge Graph embedding model optimizer.

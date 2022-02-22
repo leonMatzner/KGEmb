@@ -15,6 +15,9 @@ from models import all_models
 from optimizers.kg_optimizer import KGOptimizer
 from utils.train import get_savedir, avg_both, format_metrics, count_params
 
+# imported for optimizer initialization
+import geoopt as geo
+
 parser = argparse.ArgumentParser(
     description="Knowledge Graph Embedding"
 )
@@ -130,6 +133,8 @@ def train(args):
     # get optimizer
     regularizer = getattr(regularizers, args.regularizer)(args.reg)
     optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate)
+    if args.model == "hyperbolic" or args.model == "spheric" or args.model == "mixed" or args.model == "euclidean":
+        optim_method.optimizer = getattr(geo.optim, "RiemannianAdam")(model.parameters(), lr=args.learning_rate)
     optimizer = KGOptimizer(model, regularizer, optim_method, args.batch_size, args.neg_sample_size,
                             bool(args.double_neg))
     counter = 0

@@ -25,15 +25,19 @@ class BaseM(KGModel):
         self.hDims = 1
         self.hCurv = 1
         self.signature()
+        # For working with the Product manifold
+        if self.model == "mixed":
+            self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
         # defines the appropriate manifold
         if(args.model == "spheric"):
-            self.embed_manifold = geo.SphereProjection(sCurv)
+            self.embed_manifold = geo.SphereProjection(self.sCurv)
         elif(args.model == "euclidean"):
             self.embed_manifold = geo.Euclidean()
         elif(args.model == "hyperbolic"):
-            self.embed_manifold = geo.PoincareBall(hCurv)
+            self.embed_manifold = geo.PoincareBall(self.hCurv)
         else:
-            self.embed_manifold = geo.ProductManifold((geo.SphereProjection(sCurv), sDims), (geo.Euclidean(eDims)), (geo.PoincareBall(hCurv), hDims))
+            self.embed_manifold = geo.ProductManifold(
+                (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
             
     def get_rhs(self, queries, eval_mode):
         """Get embeddings and biases of target entities."""
@@ -44,15 +48,32 @@ class BaseM(KGModel):
             
     def similarity_score(self, lhs_e, rhs_e, eval_mode):
         """Compute similarity scores or queries against targets in embedding space."""
-        #lhs_e, c = lhs_e
+        device = lhs_e.device
         if(eval_mode):
-            score = lhs_e @ rhs_e.transpose(0,1)
-            score = torch.empty((len([1 for i in lhs_e]), len([ 1 for i in rhs_e])), dtype=self.data_type, device='cuda:0')
+            # create empty tensor, which will later be iteratively filled
+            score = torch.empty((len([1 for i in lhs_e]), len([ 1 for i in rhs_e])), dtype=self.data_type, device=device)
             i = 0
-            for coordinate in lhs_e:
-                scoreRow = - torch.sum((rhs_e - coordinate).pow(2), dim=1)
-                score[i] = scoreRow
-                i = i + 1
+            if(self.model == "euclidean"):
+                i = 0
+                for coordinate in lhs_e:
+                    # score = - distance ** 2
+                    scoreRow = - torch.sum((rhs_e - coordinate).pow(2), dim=1)
+                    score[i] = scoreRow
+                    i = i + 1
+            elif(self.model == "spheric" or self.model == "hyperbolic"):
+                i = 0
+                for coordinate in lhs_e:
+                    # score = - distance ** 2
+                    scoreRow = - self.embed_manifold.dist2(rhs_e, coordinate)
+                    score[i] = scoreRow
+                    i = i + 1
+            elif(self.model == "mixed"):
+                i = 0
+                for coordinate in lhs_e:
+                    # score = - distance ** 2
+                    scoreRow = - self.embed_manifold.dist2(rhs_e, coordinate)
+                    score[i] = scoreRow
+                    i = i + 1
         else:
             if(self.model == "euclidean"):
                 # Score is the negative squared euclidean distance 
@@ -61,11 +82,20 @@ class BaseM(KGModel):
                 # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
                 score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
             elif(self.model == "spheric"):
-                pass
+                # Score is the negative squared euclidean distance 
+                score = - self.embed_manifold.dist2(lhs_e, rhs_e)
+                # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
+                score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
             elif(self.model == "hyperbolic"):
-                pass
-            else:
-                pass
+                # Score is the negative squared euclidean distance 
+                score = - self.embed_manifold.dist2(lhs_e, rhs_e)
+                # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
+                score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
+            elif(self.model == "mixed"):
+                # Score is the negative squared euclidean distance 
+                score = - self.embed_manifold.dist2(lhs_e, rhs_e)
+                # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
+                score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
         return score
 
     def signature(self):
@@ -85,9 +115,43 @@ class euclidean(BaseM):
         lhs_biases = self.bh(queries[:, 0])
         return lhs_e, lhs_biases
     
+class spheric(BaseM):
+    """ Spheric embedding """
+    
+    def get_queries(self, queries):
+        head = self.entity(queries[:, 0])
+        relation = self.rel(queries[:, 1])
+        lhs_e = self.embed_manifold.mobius_add(head, relation)
+        lhs_biases = self.bh(queries[:, 0])
+        return lhs_e, lhs_biases
+    
 class hyperbolic(BaseM):
     """ Hyperbolic embedding """
     
     def get_queries(self, queries):
         head = self.entity(queries[:, 0])
         relation = self.rel(queries[:, 1])
+        lhs_e = self.embed_manifold.mobius_add(head, relation)
+        lhs_biases = self.bh(queries[:, 0])
+        return lhs_e, lhs_biases
+
+class mixed(BaseM):
+    """ Mixed embedding """
+    
+    def get_queries(self, queries):
+        head = self.entity(queries[:, 0])
+        relation = self.rel(queries[:, 1])
+        # Translates the space components separately
+        lhs_e_comps = []
+        for i in range(len(self.components)):
+            headComp = self.embed_manifold.take_submanifold_value(head, i)
+            relComp = self.embed_manifold.take_submanifold_value(relation, i)
+            if self.components[i][0] == "spheric":
+                lhs_e_comps.append(geo.SphereProjection(self.components[i][1]).mobius_add(headComp, relComp))
+            elif self.components[i][0] == "euclidean":
+                lhs_e_comps.append(headComp + relComp)
+            elif self.components[i][0] == "hyperbolic":
+                lhs_e_comps.append(geo.PoincareBall(self.components[i][1]).mobius_add(headComp, relComp))
+        lhs_e = torch.cat([lhs_e_comps[i] for i in range(len(lhs_e_comps))], 1)
+        lhs_biases = self.bh(queries[:, 0])
+        return lhs_e, lhs_biases
