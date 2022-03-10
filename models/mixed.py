@@ -25,17 +25,16 @@ class BaseM(KGModel):
         self.hDims = 1
         self.hCurv = 1
         self.signature()
-        # For working with the Product manifold
-        if self.model == "mixed":
-            self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
         # defines the appropriate manifold
-        if(args.model == "spheric"):
+        if self.model == "spheric":
             self.embed_manifold = geo.SphereProjection(self.sCurv)
-        elif(args.model == "euclidean"):
-            self.embed_manifold = geo.Euclidean()
-        elif(args.model == "hyperbolic"):
+        elif self.model == "euclidean":
+            self.embed_manifold = geo.Euclidean(ndim=1)
+        elif self.model == "hyperbolic":
             self.embed_manifold = geo.PoincareBall(self.hCurv)
-        else:
+        elif self.model == "mixed":
+            # For working with the Product manifold
+            self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
             self.embed_manifold = geo.ProductManifold(
                 (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
             
@@ -53,49 +52,16 @@ class BaseM(KGModel):
             # create empty tensor, which will later be iteratively filled
             score = torch.empty((len([1 for i in lhs_e]), len([ 1 for i in rhs_e])), dtype=self.data_type, device=device)
             i = 0
-            if(self.model == "euclidean"):
-                i = 0
-                for coordinate in lhs_e:
-                    # score = - distance ** 2
-                    scoreRow = - torch.sum((rhs_e - coordinate).pow(2), dim=1)
-                    score[i] = scoreRow
-                    i = i + 1
-            elif(self.model == "spheric" or self.model == "hyperbolic"):
-                i = 0
-                for coordinate in lhs_e:
-                    # score = - distance ** 2
-                    scoreRow = - self.embed_manifold.dist2(rhs_e, coordinate)
-                    score[i] = scoreRow
-                    i = i + 1
-            elif(self.model == "mixed"):
-                i = 0
-                for coordinate in lhs_e:
-                    # score = - distance ** 2
-                    scoreRow = - self.embed_manifold.dist2(rhs_e, coordinate)
-                    score[i] = scoreRow
-                    i = i + 1
+            for coordinate in lhs_e:
+                # score = - distance ** 2
+                scoreRow = - self.embed_manifold.dist2(rhs_e, coordinate)
+                score[i] = scoreRow
+                i = i + 1
         else:
-            if(self.model == "euclidean"):
-                # Score is the negative squared euclidean distance 
-                # (geoopt.Euclidean.dist(2) doesn't calculate the correct distance, sum over components is missing)
-                score = - torch.sum(self.embed_manifold.dist2(lhs_e, rhs_e), dim=1)
-                # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
-                score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
-            elif(self.model == "spheric"):
-                # Score is the negative squared euclidean distance 
-                score = - self.embed_manifold.dist2(lhs_e, rhs_e)
-                # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
-                score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
-            elif(self.model == "hyperbolic"):
-                # Score is the negative squared euclidean distance 
-                score = - self.embed_manifold.dist2(lhs_e, rhs_e)
-                # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
-                score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
-            elif(self.model == "mixed"):
-                # Score is the negative squared euclidean distance 
-                score = - self.embed_manifold.dist2(lhs_e, rhs_e)
-                # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
-                score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
+            # Score is the negative squared euclidean distance 
+            score = - self.embed_manifold.dist2(lhs_e, rhs_e)
+            # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
+            score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
         return score
 
     def signature(self):
