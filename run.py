@@ -18,6 +18,12 @@ from utils.train import get_savedir, avg_both, format_metrics, count_params
 # imported for optimizer initialization
 import geoopt as geo
 
+# imported for HPO
+import optuna
+
+# for copying args without reference passing
+from copy import copy
+
 parser = argparse.ArgumentParser(
     description="Knowledge Graph Embedding"
 )
@@ -85,6 +91,16 @@ parser.add_argument(
 parser.add_argument(
     "--multi_c", action="store_true", help="Multiple curvatures per relation"
 )
+# custom arguments
+parser.add_argument(
+    "--curv", default=1, type=float, help="Sets the curvature for models that support it"
+)
+parser.add_argument(
+    "--hpoTrials", default=10, type=int, help="Sets the number of HPO rounds"
+)
+parser.add_argument(
+    "--hpoSampler", default="grid", type=str, help="Selects the sampling method (grid (grid search), rand (random sampler), tpe (Tree Parzen Estimator), etc.)"
+)
 
 
 def train(args):
@@ -122,31 +138,43 @@ def train(args):
     with open(os.path.join(save_dir, "config.json"), "w") as fjson:
         json.dump(vars(args), fjson)
 
-    # create model
-    model = getattr(models, args.model)(args)
-    total = count_params(model)
-    logging.info("Total number of parameters {}".format(total))
-    # replace cuda with cpu in order to use the cpu
-    device = "cuda"
-    model.to(device)
+    # create empty model
+    model = None
 
     # get optimizer
-    regularizer = getattr(regularizers, args.regularizer)(args.reg)
-    optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate)
-    if args.model == "hyperbolic" or args.model == "spheric" or args.model == "mixed" or args.model == "euclidean":
-        optim_method.optimizer = getattr(geo.optim, "RiemannianAdam")(model.parameters(), lr=args.learning_rate)
-    optimizer = KGOptimizer(model, regularizer, optim_method, args.batch_size, args.neg_sample_size,
-                            bool(args.double_neg))
+    optimizer = None
+
     counter = 0
-    best_mrr = None
+    best_mrr = 0
     best_epoch = None
     logging.info("\t Start training")
-    for step in range(args.max_epochs):
+    
+    step = 0
+    valid_mrr = 0
+
+    # default args
+    defArgs = copy(args)
+    
+    def train_model():
+        nonlocal step
+        nonlocal train_examples
+        nonlocal model
+        nonlocal optimizer
 
         # Train step
         model.train()
         train_loss = optimizer.epoch(train_examples)
         logging.info("\t Epoch {} | average train loss: {:.4f}".format(step, train_loss))
+        
+    def validate_model():
+        nonlocal step
+        nonlocal model
+        nonlocal valid_examples
+        nonlocal args
+        nonlocal filters
+        nonlocal valid_mrr
+        nonlocal model
+        nonlocal optimizer
 
         # Valid step
         model.eval()
@@ -158,6 +186,55 @@ def train(args):
             logging.info(format_metrics(valid_metrics, split="valid"))
 
             valid_mrr = valid_metrics["MRR"]
+
+    def objective(trial):
+        nonlocal best_mrr
+        nonlocal step
+        nonlocal save_dir
+        nonlocal model
+        nonlocal valid_mrr
+        nonlocal counter
+        nonlocal best_epoch
+        nonlocal model
+        nonlocal optimizer
+        
+        valid_mrr = 0
+        best_mrr = 0
+
+        # set params
+        args.rank = trial.suggest_int("args.rank", round(defArgs.rank / 2), defArgs.rank)
+        args.curv = round(trial.suggest_float("args.curv", 0, defArgs.curv), 4)
+        args.learning_rate = round(trial.suggest_float("args.learning_rate", 0.01, defArgs.learning_rate), 4)
+        non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
+        "RiemannianSGD"])
+
+        # create model
+        model = getattr(models, args.model)(args)
+        total = count_params(model)
+        logging.info("Total number of parameters {}".format(total))
+        # replace cuda with cpu in order to use the cpu
+        device = "cuda"
+        model.to(device)
+
+        # get optimizer
+        regularizer = getattr(regularizers, args.regularizer)(args.reg)
+        optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate)
+        # Set Riemannian Optimizer
+        if args.model == "hyperbolic" or args.model == "spheric" or args.model == "mixed" or args.model == "euclidean":
+            if str(non_euclidean_optimizer) == "RiemannianLineSearch":
+                optim_method.optimizer = getattr(geo.optim, str(non_euclidean_optimizer))(model.parameters())
+            else:
+                optim_method.optimizer = getattr(geo.optim, str(non_euclidean_optimizer))(model.parameters(), lr=args.learning_rate)
+        optimizer = KGOptimizer(model, regularizer, optim_method, args.batch_size, args.neg_sample_size,
+                                bool(args.double_neg))
+
+        for step in range(args.max_epochs):
+
+            # Train step
+            train_model()
+            
+            # Valid step
+            validate_model()
             if not best_mrr or valid_mrr > best_mrr:
                 best_mrr = valid_mrr
                 counter = 0
@@ -176,12 +253,29 @@ def train(args):
                     # logging.info("\t Reducing learning rate")
                     # optimizer.reduce_lr()
 
+        return best_mrr
+
+    # Select sampler
+    search_space = {"args.rank": [defArgs.rank / 2, defArgs.rank], "args.curv": [0, defArgs.curv], 
+    "args.learning_rate": [0.01, defArgs.learning_rate], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
+    if defArgs.hpoSampler == "grid":
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.GridSampler(search_space))
+    elif defArgs.hpoSampler == "rand":
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.RandomSampler())
+    elif defArgs.hpoSampler == "tpe":
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+        
+    # execute HPO
+    study.optimize(objective, n_trials=args.hpoTrials)
+
     logging.info("\t Optimization finished")
     if not best_mrr:
         torch.save(model.cpu().state_dict(), os.path.join(save_dir, "model.pt"))
     else:
-        logging.info("\t Loading best model saved at epoch {}".format(best_epoch))
-        model.load_state_dict(torch.load(os.path.join(save_dir, "model.pt")))
+        # disabled since HPO interveres
+        pass
+        #logging.info("\t Loading best model saved at epoch {}".format(best_epoch))
+        #model.load_state_dict(torch.load(os.path.join(save_dir, "model.pt")))
     # replace .cuda() with .cpu() to use the cpu
     model.cuda()
     model.eval()

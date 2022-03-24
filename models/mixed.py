@@ -18,6 +18,7 @@ class BaseM(KGModel):
         # initialize entity and relation weights
         self.entity.weight.data = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
         self.rel.weight.data = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
+        self.curv = args.curv
         # initialize signature
         self.sDims = 1
         self.sCurv = 1
@@ -27,11 +28,11 @@ class BaseM(KGModel):
         self.signature()
         # defines the appropriate manifold
         if self.model == "spheric":
-            self.embed_manifold = geo.SphereProjection(self.sCurv)
+            self.embed_manifold = geo.SphereProjection(self.curv)
         elif self.model == "euclidean":
             self.embed_manifold = geo.Euclidean(ndim=1)
         elif self.model == "hyperbolic":
-            self.embed_manifold = geo.PoincareBall(self.hCurv)
+            self.embed_manifold = geo.PoincareBall(self.curv)
         elif self.model == "mixed":
             # For working with the Product manifold
             self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
