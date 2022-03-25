@@ -4,6 +4,8 @@ import torch
 import geoopt as geo
 from torch import nn
 
+import math
+
 from models.base import KGModel
 
 MIX_MODELS = ["spheric", "euclidean", "hyperbolic", "mixed"]
@@ -20,12 +22,12 @@ class BaseM(KGModel):
         self.rel.weight.data = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
         self.curv = args.curv
         # initialize signature
-        self.sDims = 1
-        self.sCurv = 1
-        self.eDims = 1
-        self.hDims = 1
-        self.hCurv = 1
-        self.signature()
+        nonEuclideanDims = math.floor(args.rank * args.non_euclidean_ratio)
+        self.sDims = math.floor(nonEuclideanDims * (1 - args.hyperbolic_ratio))
+        self.sCurv = args.sphericalCurv
+        self.eDims = args.rank - nonEuclideanDims
+        self.hDims = nonEuclideanDims - self.sDims
+        self.hCurv = args.hyperbolicCurv
         # defines the appropriate manifold
         if self.model == "spheric":
             self.embed_manifold = geo.SphereProjection(self.curv)
@@ -37,7 +39,7 @@ class BaseM(KGModel):
             # For working with the Product manifold
             self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
             self.embed_manifold = geo.ProductManifold(
-                (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
+                (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
             
     def get_rhs(self, queries, eval_mode):
         """Get embeddings and biases of target entities."""
@@ -64,13 +66,6 @@ class BaseM(KGModel):
             # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
             score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
         return score
-
-    def signature(self):
-        self.sDims = 10
-        self.sCurv = 1
-        self.eDims = 10
-        self.hDims = 10
-        self.hCurv = 1
         
 class euclidean(BaseM):
     """Euclidean embedding """

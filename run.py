@@ -101,6 +101,18 @@ parser.add_argument(
 parser.add_argument(
     "--hpoSampler", default="grid", type=str, help="Selects the sampling method (grid (grid search), rand (random sampler), tpe (Tree Parzen Estimator), etc.)"
 )
+parser.add_argument(
+    "--hyperbolicCurv", default=None, type=float, help="DONT USE (for internal use)"
+)
+parser.add_argument(
+    "--sphericalCurv", default=None, type=float, help="DONT SET (for internal use)"
+)
+parser.add_argument(
+    "--non_euclidean_ratio", default=None, type=float, help="DONT SET (for internal use)"
+)
+parser.add_argument(
+    "--hyperbolic_ratio", default=None, type=float, help="DONT SET (for internal use)"
+)
 
 
 def train(args):
@@ -207,6 +219,15 @@ def train(args):
         args.learning_rate = round(trial.suggest_float("args.learning_rate", 0.01, defArgs.learning_rate), 4)
         non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
         "RiemannianSGD"])
+        
+        if defArgs.model == "mixed":
+            args.hyperbolicCurv = round(trial.suggest_float("args.hyperbolicCurv", 0, defArgs.curv), 4)
+            args.sphericalCurv = round(trial.suggest_float("args.sphericalCurv", 0, defArgs.curv), 4)
+            args.non_euclidean_ratio = round(trial.suggest_float("args.non_euclidean_ratio", 0, 1), 4)
+            args.hyperbolic_ratio = round(trial.suggest_float("args.hyperbolic_ratio", 0, 1), 4)
+        
+        if defArgs.model == "mixed":
+            pass
 
         # create model
         model = getattr(models, args.model)(args)
@@ -256,9 +277,9 @@ def train(args):
         return best_mrr
 
     # Select sampler
-    search_space = {"args.rank": [defArgs.rank / 2, defArgs.rank], "args.curv": [0, defArgs.curv], 
-    "args.learning_rate": [0.01, defArgs.learning_rate], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
     if defArgs.hpoSampler == "grid":
+        search_space = {"args.rank": [defArgs.rank / 2, defArgs.rank], "args.curv": [0, defArgs.curv], 
+        "args.learning_rate": [0.01, defArgs.learning_rate], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.GridSampler(search_space))
     elif defArgs.hpoSampler == "rand":
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.RandomSampler())
