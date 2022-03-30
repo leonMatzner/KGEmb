@@ -18,28 +18,63 @@ class BaseM(KGModel):
         # Make model accessible to funtions
         self.model = args.model
         # initialize entity and relation weights
-        self.entity.weight.data = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
-        self.rel.weight.data = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
+        initEntityData = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
+        initRelData = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
         self.curv = args.curv
+
         # initialize signature
-        nonEuclideanDims = math.floor(args.rank * args.non_euclidean_ratio)
-        self.sDims = math.floor(nonEuclideanDims * (1 - args.hyperbolic_ratio))
-        self.sCurv = args.sphericalCurv
-        self.eDims = args.rank - nonEuclideanDims
-        self.hDims = nonEuclideanDims - self.sDims
-        self.hCurv = args.hyperbolicCurv
+        if args.model == "mixed":
+            nonEuclideanDims = math.floor(args.rank * args.non_euclidean_ratio)
+            self.sDims = math.floor(nonEuclideanDims * (1 - args.hyperbolic_ratio))
+            self.sCurv = args.sphericalCurv
+            self.eDims = args.rank - nonEuclideanDims
+            self.hDims = nonEuclideanDims - self.sDims
+            self.hCurv = args.hyperbolicCurv
+
         # defines the appropriate manifold
         if self.model == "spheric":
             self.embed_manifold = geo.SphereProjection(self.curv)
         elif self.model == "euclidean":
             self.embed_manifold = geo.Euclidean(ndim=1)
         elif self.model == "hyperbolic":
-            self.embed_manifold = geo.PoincareBall(self.curv)
+            self.embed_manifold = geo.PoincareBall(learnable=True)
         elif self.model == "mixed":
             # For working with the Product manifold
-            self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
-            self.embed_manifold = geo.ProductManifold(
-                (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
+            # All components present
+            if self.sDims > 0 and self.eDims > 0 and self.hDims > 0:
+                self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
+                self.embed_manifold = geo.ProductManifold(
+                    (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
+            # One component missing
+            elif self.sDims == 0 and self.eDims > 0 and self.hDims > 0:
+                self.components = [("euclidean", 0), ("hyperbolic", self.hCurv)]
+                self.embed_manifold = geo.ProductManifold(
+                    (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
+            elif self.sDims > 0 and self.eDims == 0 and self.hDims > 0:
+                self.components = [("spheric", self.sCurv), ("hyperbolic", self.hCurv)]
+                self.embed_manifold = geo.ProductManifold(
+                    (geo.SphereProjection(self.sCurv), self.sDims), (geo.PoincareBall(self.hCurv), self.hDims))
+            elif self.sDims > 0 and self.eDims > 0 and self.hDims == 0:
+                self.components = [("spheric", self.sCurv), ("euclidean", 0)]
+                self.embed_manifold = geo.ProductManifold(
+                    (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(ndim=1), self.eDims))
+            # Two components missing    
+            elif self.sDims == 0 and self.eDims == 0 and self.hDims > 0:
+                self.components = [("hyperbolic", self.hCurv)]
+                self.embed_manifold = geo.ProductManifold(
+                    (geo.PoincareBall(self.hCurv), self.hDims))
+            elif self.sDims == 0 and self.eDims > 0 and self.hDims == 0:
+                self.components = [("euclidean", 0)]
+                self.embed_manifold = geo.ProductManifold(
+                    (geo.Euclidean(ndim=1), self.eDims))
+            elif self.sDims > 0 and self.eDims == 0 and self.hDims == 0:
+                self.components = [("spheric", self.sCurv)]
+                self.embed_manifold = geo.ProductManifold(
+                    (geo.SphereProjection(self.sCurv), self.sDims))
+
+        # Project points onto the manifold
+        self.entity.weight.data = self.embed_manifold.projx(initEntityData)
+        self.rel.weight.data = self.embed_manifold.projx(initRelData)
             
     def get_rhs(self, queries, eval_mode):
         """Get embeddings and biases of target entities."""

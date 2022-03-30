@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import math
 
 import torch
 import torch.optim
@@ -51,10 +52,10 @@ parser.add_argument(
     "--patience", default=10, type=int, help="Number of epochs before early stopping"
 )
 parser.add_argument(
-    "--valid", default=3, type=float, help="Number of epochs before validation"
+    "--valid", default=4, type=float, help="Number of epochs before validation"
 )
 parser.add_argument(
-    "--rank", default=1000, type=int, help="Embedding dimension"
+    "--rank", default=16, type=int, help="Embedding dimension"
 )
 parser.add_argument(
     "--batch_size", default=1000, type=int, help="Batch size"
@@ -93,7 +94,7 @@ parser.add_argument(
 )
 # custom arguments
 parser.add_argument(
-    "--curv", default=1, type=float, help="Sets the curvature for models that support it"
+    "--curv", default=4, type=float, help="Sets the curvature for models that support it"
 )
 parser.add_argument(
     "--hpoTrials", default=10, type=int, help="Sets the number of HPO rounds"
@@ -102,10 +103,10 @@ parser.add_argument(
     "--hpoSampler", default="grid", type=str, help="Selects the sampling method (grid (grid search), rand (random sampler), tpe (Tree Parzen Estimator), etc.)"
 )
 parser.add_argument(
-    "--hyperbolicCurv", default=None, type=float, help="DONT USE (for internal use)"
+    "--hyperbolicCurv", default=4, type=float, help="DONT USE (for internal use)"
 )
 parser.add_argument(
-    "--sphericalCurv", default=None, type=float, help="DONT SET (for internal use)"
+    "--sphericalCurv", default=4, type=float, help="DONT SET (for internal use)"
 )
 parser.add_argument(
     "--non_euclidean_ratio", default=None, type=float, help="DONT SET (for internal use)"
@@ -166,7 +167,7 @@ def train(args):
 
     # default args
     defArgs = copy(args)
-    
+
     def train_model():
         nonlocal step
         nonlocal train_examples
@@ -214,9 +215,13 @@ def train(args):
         best_mrr = 0
 
         # set params
-        args.rank = trial.suggest_int("args.rank", round(defArgs.rank / 2), defArgs.rank)
+        # Exponential sampling
+        args.rank = int(round(pow(2, trial.suggest_float("args.rank", math.log(16, 2), math.log(defArgs.rank, 2))), 0))
         args.curv = round(trial.suggest_float("args.curv", 0, defArgs.curv), 4)
-        args.learning_rate = round(trial.suggest_float("args.learning_rate", 0.01, defArgs.learning_rate), 4)
+        # Exponential sampling
+        args.learning_rate = round(pow(2, trial.suggest_float("args.learning_rate", math.log(0.0001, 2), math.log(defArgs.learning_rate, 2))), 10)
+        #non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
+        #"RiemannianSGD"])
         non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
         "RiemannianSGD"])
         
@@ -226,9 +231,6 @@ def train(args):
             args.non_euclidean_ratio = round(trial.suggest_float("args.non_euclidean_ratio", 0, 1), 4)
             args.hyperbolic_ratio = round(trial.suggest_float("args.hyperbolic_ratio", 0, 1), 4)
         
-        if defArgs.model == "mixed":
-            pass
-
         # create model
         model = getattr(models, args.model)(args)
         total = count_params(model)
@@ -266,7 +268,7 @@ def train(args):
                 model.cuda()
             else:
                 counter += 1
-                if counter == args.patience:
+                if counter == args.patience and (step + 1) % args.valid == 0:
                     logging.info("\t Early stopping")
                     break
                 elif counter == args.patience // 2:
@@ -278,8 +280,18 @@ def train(args):
 
     # Select sampler
     if defArgs.hpoSampler == "grid":
-        search_space = {"args.rank": [defArgs.rank / 2, defArgs.rank], "args.curv": [0, defArgs.curv], 
-        "args.learning_rate": [0.01, defArgs.learning_rate], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
+        search_space = {}
+        if defArgs.model == "mixed":
+            search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank,2)], "args.curv": [0, defArgs.curv], 
+            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"],
+            "args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.sphericalCurv": [0, defArgs.sphericalCurv], 
+            "args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
+            #search_space = {"args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.sphericalCurv": [0, defArgs.sphericalCurv], 
+            #"args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
+            #search_space = {"args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
+        else:
+            search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank, 2)], "args.curv": [0, defArgs.curv], 
+            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.GridSampler(search_space))
     elif defArgs.hpoSampler == "rand":
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.RandomSampler())
@@ -287,7 +299,7 @@ def train(args):
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
         
     # execute HPO
-    study.optimize(objective, n_trials=args.hpoTrials)
+    study.optimize(objective, n_trials=args.hpoTrials, gc_after_trial=True)
 
     logging.info("\t Optimization finished")
     if not best_mrr:
