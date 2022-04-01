@@ -164,15 +164,31 @@ def train(args):
     
     step = 0
     valid_mrr = 0
+    valid_metrics = None
+    best_overall_valid_metrics = None
+    best_trial_valid_metrics = None
+    trialResults = ""
 
     # default args
     defArgs = copy(args)
+    
+    # get results file
+    if not os.path.isfile("./results.txt"):
+        results = open("./results.txt", "x")
+        results.write("# Experiment settings\n")
+        results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, max epochs, max dimension, max curvature, learning rate, patience\n")
+        results.write("# Trial settings\n")
+        results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio\n")
+    else:
+        results = open("results.txt", "a")
+    
 
     def train_model():
         nonlocal step
         nonlocal train_examples
         nonlocal model
         nonlocal optimizer
+        nonlocal valid_metrics
 
         # Train step
         model.train()
@@ -188,6 +204,7 @@ def train(args):
         nonlocal valid_mrr
         nonlocal model
         nonlocal optimizer
+        nonlocal valid_metrics
 
         # Valid step
         model.eval()
@@ -210,9 +227,15 @@ def train(args):
         nonlocal best_epoch
         nonlocal model
         nonlocal optimizer
-        
+        nonlocal results
+        nonlocal valid_metrics
+        nonlocal best_overall_valid_metrics
+        nonlocal trialResults
+        nonlocal best_trial_valid_metrics
+
         valid_mrr = 0
         best_mrr = 0
+        best_trial_valid_metrics = None
 
         # set params
         # Exponential sampling
@@ -260,6 +283,10 @@ def train(args):
             validate_model()
             if not best_mrr or valid_mrr > best_mrr:
                 best_mrr = valid_mrr
+                if best_overall_valid_metrics == None or best_mrr > best_overall_valid_metrics["MRR"]:
+                    best_overall_valid_metrics = copy(valid_metrics)
+                if best_trial_valid_metrics == None or best_mrr > best_trial_valid_metrics["MRR"]:
+                    best_trial_valid_metrics = copy(valid_metrics)
                 counter = 0
                 best_epoch = step
                 logging.info("\t Saving model at epoch {} in {}".format(step, save_dir))
@@ -275,7 +302,26 @@ def train(args):
                     pass
                     # logging.info("\t Reducing learning rate")
                     # optimizer.reduce_lr()
-
+        
+        # append trial results to trialResults
+        if defArgs.model == "mixed":
+            trialResults += ("+ " + str(best_mrr) + ", " + 
+            str(best_trial_valid_metrics["MR"]) + ", " + 
+            str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+            str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + 
+            str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
+            str(args.rank) + ", " + 
+            str(args.curv) + ", " + 
+            str(args.optimizer) + ", " + 
+            str(args.learning_rate) + ", " + 
+            str(args.hyperbolicCurv) + ", " + 
+            str(args.sphericalCurv) + ", " + 
+            str(args.non_euclidean_ratio) + ", " + 
+            str(args.hyperbolic_ratio) + "\n")
+        else:
+            trialResults += ("+ " + str(best_mrr) + ", " + str(best_trial_valid_metrics["MR"]) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+            str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
+            str(args.rank) + ", " + str(args.curv) + ", " + str(args.optimizer) + ", " + str(args.learning_rate) + ", -, -, -, -\n")
         return best_mrr
 
     # Select sampler
@@ -300,6 +346,16 @@ def train(args):
         
     # execute HPO
     study.optimize(objective, n_trials=args.hpoTrials, gc_after_trial=True)
+
+    # write experiment settings
+    results.write(str(best_mrr) + ", " + str(best_overall_valid_metrics["MR"]) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+    str(best_overall_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
+    str(defArgs.hpoSampler) + ", " + str(defArgs.hpoTrials) + ", " + str(defArgs.dataset) + ", " + str(defArgs.max_epochs) + ", " + 
+    str(defArgs.rank) + ", " + str(defArgs.curv) + ", " + str(defArgs.learning_rate) + ", " + str(defArgs.patience) + "\n")
+        
+    results.write(trialResults)
+    
+    results.close()
 
     logging.info("\t Optimization finished")
     if not best_mrr:
