@@ -168,6 +168,7 @@ def train(args):
     best_overall_valid_metrics = None
     best_trial_valid_metrics = None
     trialResults = ""
+    best_valid_loss = None
 
     # default args
     defArgs = copy(args)
@@ -205,17 +206,21 @@ def train(args):
         nonlocal model
         nonlocal optimizer
         nonlocal valid_metrics
+        nonlocal best_valid_loss
 
         # Valid step
         model.eval()
         valid_loss = optimizer.calculate_valid_loss(valid_examples)
         logging.info("\t Epoch {} | average valid loss: {:.4f}".format(step, valid_loss))
 
-        if (step + 1) % args.valid == 0:
+        if (step + 1) % args.valid == 0 or best_valid_loss == None or valid_loss < best_valid_loss:
             valid_metrics = avg_both(*model.compute_metrics(valid_examples, filters))
             logging.info(format_metrics(valid_metrics, split="valid"))
 
             valid_mrr = valid_metrics["MRR"]
+            
+            best_valid_loss = valid_loss
+
 
     def objective(trial):
         nonlocal best_mrr
@@ -232,10 +237,12 @@ def train(args):
         nonlocal best_overall_valid_metrics
         nonlocal trialResults
         nonlocal best_trial_valid_metrics
+        nonlocal best_valid_loss
 
         valid_mrr = 0
         best_mrr = 0
         best_trial_valid_metrics = None
+        best_valid_loss = None
 
         # set params
         # Exponential sampling
