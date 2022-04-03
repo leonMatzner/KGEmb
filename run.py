@@ -290,9 +290,9 @@ def train(args):
             validate_model()
             if not best_mrr or valid_mrr > best_mrr:
                 best_mrr = valid_mrr
-                if best_overall_valid_metrics == None or best_mrr > best_overall_valid_metrics["MRR"]:
+                if best_overall_valid_metrics == None or best_mrr < best_overall_valid_metrics["MRR"]:
                     best_overall_valid_metrics = copy(valid_metrics)
-                if best_trial_valid_metrics == None or best_mrr > best_trial_valid_metrics["MRR"]:
+                if best_trial_valid_metrics == None or best_mrr < best_trial_valid_metrics["MRR"]:
                     best_trial_valid_metrics = copy(valid_metrics)
                 counter = 0
                 best_epoch = step
