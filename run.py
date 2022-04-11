@@ -118,12 +118,14 @@ parser.add_argument(
     "--hyperbolic_ratio", default=None, type=float, help="DONT SET (for internal use)"
 )
 parser.add_argument(
-    "--device_name", default="cuda:0", type=str, help="selects the device on which the model operates"
+    "--device_name", default="0", type=int, help="selects the device on which the model operates"
 )
 
 
 def train(args):
     save_dir = get_savedir(args.model, args.dataset)
+
+    CUDA_VISIBLE_DEVICES = args.device_name
 
     # file logger
     logging.basicConfig(
@@ -274,8 +276,8 @@ def train(args):
         total = count_params(model)
         #logging.info("Total number of parameters {}".format(total))
         # replace cuda with cpu in order to use the cpu
-        #device = "cuda"
-        model.to(defArgs.device_name)
+        device = "cuda"
+        model.to(device)
 
         # get optimizer
         regularizer = getattr(regularizers, args.regularizer)(args.reg)
