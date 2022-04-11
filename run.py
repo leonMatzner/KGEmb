@@ -22,6 +22,9 @@ import geoopt as geo
 # imported for HPO
 import optuna
 
+# imported for parallelization
+#import sqlite3
+
 # for copying args without reference passing
 from copy import copy
 
@@ -114,6 +117,9 @@ parser.add_argument(
 parser.add_argument(
     "--hyperbolic_ratio", default=None, type=float, help="DONT SET (for internal use)"
 )
+parser.add_argument(
+    "--device_name", default="cuda:0", type=str, help="selects the device on which the model operates"
+)
 
 
 def train(args):
@@ -194,7 +200,7 @@ def train(args):
         # Train step
         model.train()
         train_loss = optimizer.epoch(train_examples)
-        logging.info("\t Epoch {} | average train loss: {:.4f}".format(step, train_loss))
+        #logging.info("\t Epoch {} | average train loss: {:.4f}".format(step, train_loss))
         
     def validate_model():
         nonlocal step
@@ -211,11 +217,11 @@ def train(args):
         # Valid step
         model.eval()
         valid_loss = optimizer.calculate_valid_loss(valid_examples)
-        logging.info("\t Epoch {} | average valid loss: {:.4f}".format(step, valid_loss))
+        #logging.info("\t Epoch {} | average valid loss: {:.4f}".format(step, valid_loss))
 
         if (step + 1) % args.valid == 0 or best_valid_loss == None or valid_loss < best_valid_loss:
             valid_metrics = avg_both(*model.compute_metrics(valid_examples, filters))
-            logging.info(format_metrics(valid_metrics, split="valid"))
+            #logging.info(format_metrics(valid_metrics, split="valid"))
 
             valid_mrr = valid_metrics["MRR"]
             
@@ -247,7 +253,8 @@ def train(args):
         # set params
         # Exponential sampling
         args.rank = int(round(pow(2, trial.suggest_float("args.rank", math.log(16, 2), math.log(defArgs.rank, 2))), 0))
-        args.curv = round(trial.suggest_float("args.curv", 0, defArgs.curv), 4)
+        if defArgs.model != "mixed" and defArgs.model != "euclidean":
+            args.curv = round(trial.suggest_float("args.curv", 0, defArgs.curv), 4)
         # Exponential sampling
         args.learning_rate = round(pow(2, trial.suggest_float("args.learning_rate", math.log(0.0001, 2), math.log(defArgs.learning_rate, 2))), 10)
         #non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
@@ -256,6 +263,7 @@ def train(args):
         "RiemannianSGD"])
         
         if defArgs.model == "mixed":
+            args.curv = 4
             args.hyperbolicCurv = round(trial.suggest_float("args.hyperbolicCurv", 0, defArgs.curv), 4)
             args.sphericalCurv = round(trial.suggest_float("args.sphericalCurv", 0, defArgs.curv), 4)
             args.non_euclidean_ratio = round(trial.suggest_float("args.non_euclidean_ratio", 0, 1), 4)
@@ -264,10 +272,10 @@ def train(args):
         # create model
         model = getattr(models, args.model)(args)
         total = count_params(model)
-        logging.info("Total number of parameters {}".format(total))
+        #logging.info("Total number of parameters {}".format(total))
         # replace cuda with cpu in order to use the cpu
-        device = "cuda"
-        model.to(device)
+        #device = "cuda"
+        model.to(defArgs.device_name)
 
         # get optimizer
         regularizer = getattr(regularizers, args.regularizer)(args.reg)
@@ -288,6 +296,7 @@ def train(args):
             
             # Valid step
             validate_model()
+            
             if not best_mrr or valid_mrr > best_mrr:
                 best_mrr = valid_mrr
                 if best_overall_valid_metrics == None or best_mrr < best_overall_valid_metrics["MRR"]:
@@ -296,19 +305,19 @@ def train(args):
                     best_trial_valid_metrics = copy(valid_metrics)
                 counter = 0
                 best_epoch = step
-                logging.info("\t Saving model at epoch {} in {}".format(step, save_dir))
-                torch.save(model.cpu().state_dict(), os.path.join(save_dir, "model.pt"))
+                #logging.info("\t Saving model at epoch {} in {}".format(step, save_dir))
+                #torch.save(model.cpu().state_dict(), os.path.join(save_dir, "model.pt"))
                 # replace model.cuda() with model.cpu() in order to use the cpu
-                model.cuda()
-            else:
-                counter += 1
-                if counter == args.patience and (step + 1) % args.valid == 0:
-                    logging.info("\t Early stopping")
-                    break
-                elif counter == args.patience // 2:
-                    pass
-                    # logging.info("\t Reducing learning rate")
-                    # optimizer.reduce_lr()
+                #model.cuda()
+
+            # HPO pruner
+            if step % 1 == 0:
+                trial.report(best_mrr, step)
+
+            if trial.should_prune():
+                print("Pruned at step: " + str(step))
+                trialResults += ("+ -, -, -, -, -, -, -, -, -, -, -, -, - \n")
+                raise optuna.TrialPruned()
         
         # append trial results to trialResults
         if defArgs.model == "mixed":
@@ -342,17 +351,23 @@ def train(args):
             #search_space = {"args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.sphericalCurv": [0, defArgs.sphericalCurv], 
             #"args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
             #search_space = {"args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
+        elif defArgs.model == "euclidean":
+            search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank, 2)], 
+            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
         else:
             search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank, 2)], "args.curv": [0, defArgs.curv], 
             "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
-        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.GridSampler(search_space))
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.GridSampler(search_space), 
+        pruner=optuna.pruners.SuccessiveHalvingPruner(reduction_factor=2, min_resource=5, min_early_stopping_rate=1))
     elif defArgs.hpoSampler == "rand":
-        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.RandomSampler())
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.RandomSampler(), 
+        pruner=optuna.pruners.SuccessiveHalvingPruner(reduction_factor=2, min_resource=5, min_early_stopping_rate=1))
     elif defArgs.hpoSampler == "tpe":
-        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler())
+        study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(), 
+        pruner=optuna.pruners.SuccessiveHalvingPruner(reduction_factor=2, min_resource=5, min_early_stopping_rate=1))
         
     # execute HPO
-    study.optimize(objective, n_trials=args.hpoTrials, gc_after_trial=True)
+    study.optimize(objective, n_trials=args.hpoTrials, gc_after_trial=True, n_jobs=1)
 
     # write experiment settings
     results.write(str(best_mrr) + ", " + str(best_overall_valid_metrics["MR"]) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
@@ -364,7 +379,7 @@ def train(args):
     
     results.close()
 
-    logging.info("\t Optimization finished")
+    #logging.info("\t Optimization finished")
     if not best_mrr:
         torch.save(model.cpu().state_dict(), os.path.join(save_dir, "model.pt"))
     else:
@@ -373,16 +388,16 @@ def train(args):
         #logging.info("\t Loading best model saved at epoch {}".format(best_epoch))
         #model.load_state_dict(torch.load(os.path.join(save_dir, "model.pt")))
     # replace .cuda() with .cpu() to use the cpu
-    model.cuda()
-    model.eval()
+    #model.cuda()
+    #model.eval()
 
     # Validation metrics
     valid_metrics = avg_both(*model.compute_metrics(valid_examples, filters))
-    logging.info(format_metrics(valid_metrics, split="valid"))
+    #logging.info(format_metrics(valid_metrics, split="valid"))
 
     # Test metrics
     test_metrics = avg_both(*model.compute_metrics(test_examples, filters))
-    logging.info(format_metrics(test_metrics, split="test"))
+    #logging.info(format_metrics(test_metrics, split="test"))
 
 
 if __name__ == "__main__":

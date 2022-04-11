@@ -165,27 +165,23 @@ class KGOptimizer(object):
             loss: torch.Tensor with loss averaged over all training examples
         """
         actual_examples = examples[torch.randperm(examples.shape[0]), :]
-        with tqdm.tqdm(total=examples.shape[0], unit='ex', disable=not self.verbose) as bar:
-            bar.set_description(f'train loss')
-            b_begin = 0
-            total_loss = 0.0
-            counter = 0
-            while b_begin < examples.shape[0]:
-                # replace .cuda() with .cpu() to use the cpu
-                input_batch = actual_examples[
-                              b_begin:b_begin + self.batch_size
-                              ].cuda()
+        b_begin = 0
+        total_loss = 0.0
+        counter = 0
+        while b_begin < examples.shape[0]:
+            # replace .cuda() with .cpu() to use the cpu
+            input_batch = actual_examples[
+                          b_begin:b_begin + self.batch_size
+                          ].cuda()
 
-                # gradient step
-                l = self.calculate_loss(input_batch)
-                self.optimizer.zero_grad()
-                l.backward()
-                self.optimizer.step()
+            # gradient step
+            l = self.calculate_loss(input_batch)
+            self.optimizer.zero_grad()
+            l.backward()
+            self.optimizer.step()
 
-                b_begin += self.batch_size
-                total_loss += l
-                counter += 1
-                bar.update(input_batch.shape[0])
-                bar.set_postfix(loss=f'{l.item():.4f}')
+            b_begin += self.batch_size
+            total_loss += l
+            counter += 1
         total_loss /= counter
         return total_loss
