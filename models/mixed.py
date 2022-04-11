@@ -15,6 +15,7 @@ class BaseM(KGModel):
     def __init__(self, args):
         super(BaseM, self).__init__(args.sizes, args.rank, args.dropout, args.gamma, args.dtype, args.bias,
                                     args.init_size)
+        self.args = args
         # Make model accessible to funtions
         self.model = args.model
         # initialize entity and relation weights

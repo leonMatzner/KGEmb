@@ -31,7 +31,7 @@ def test(model_dir):
 
     # load pretrained model weights
     model = getattr(models, args.model)(args)
-    device = 'cuda'
+    #device = 'cuda'
     model.to(args.device_name)
     model.load_state_dict(torch.load(os.path.join(model_dir, 'model.pt')))
 
