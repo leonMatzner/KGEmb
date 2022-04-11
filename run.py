@@ -124,8 +124,8 @@ parser.add_argument(
 
 def train(args):
     save_dir = get_savedir(args.model, args.dataset)
-
-    CUDA_VISIBLE_DEVICES = args.device_name
+    
+    torch.cuda.device(args.device_name)
 
     # file logger
     logging.basicConfig(
