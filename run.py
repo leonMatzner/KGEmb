@@ -187,7 +187,7 @@ def train(args):
         results.write("# Experiment settings\n")
         results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, max epochs, max dimension, max curvature, learning rate, patience\n")
         results.write("# Trial settings\n")
-        results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio\n")
+        results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio, prune epoch\n")
     else:
         results = open("results.txt", "a")
     
@@ -318,7 +318,25 @@ def train(args):
 
             if trial.should_prune():
                 print("Pruned at step: " + str(step))
-                trialResults += ("+ -, -, -, -, -, -, -, -, -, -, -, -, - \n")
+                if defArgs.model == "mixed":
+                    trialResults += ("+ " + str(best_mrr) + ", " + 
+                    str(best_trial_valid_metrics["MR"]) + ", " + 
+                    str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+                    str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + 
+                    str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
+                    str(args.rank) + ", " + 
+                    str(args.curv) + ", " + 
+                    str(args.optimizer) + ", " + 
+                    str(args.learning_rate) + ", " + 
+                    str(args.hyperbolicCurv) + ", " + 
+                    str(args.sphericalCurv) + ", " + 
+                    str(args.non_euclidean_ratio) + ", " + 
+                    str(args.hyperbolic_ratio) + ", " + 
+                    str(step) + "\n")
+                else:
+                    trialResults += ("+ " + str(best_mrr) + ", " + str(best_trial_valid_metrics["MR"]) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+                    str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
+                    str(args.rank) + ", " + str(args.curv) + ", " + str(args.optimizer) + ", " + str(args.learning_rate) + ", -, -, -, -, " + str(step) + "\n")
                 raise optuna.TrialPruned()
         
         # append trial results to trialResults
@@ -335,11 +353,11 @@ def train(args):
             str(args.hyperbolicCurv) + ", " + 
             str(args.sphericalCurv) + ", " + 
             str(args.non_euclidean_ratio) + ", " + 
-            str(args.hyperbolic_ratio) + "\n")
+            str(args.hyperbolic_ratio) + ", -\n")
         else:
             trialResults += ("+ " + str(best_mrr) + ", " + str(best_trial_valid_metrics["MR"]) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
             str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
-            str(args.rank) + ", " + str(args.curv) + ", " + str(args.optimizer) + ", " + str(args.learning_rate) + ", -, -, -, -\n")
+            str(args.rank) + ", " + str(args.curv) + ", " + str(args.optimizer) + ", " + str(args.learning_rate) + ", -, -, -, -, -\n")
         return best_mrr
 
     # Select sampler
