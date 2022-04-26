@@ -185,7 +185,7 @@ def train(args):
     if not os.path.isfile("./results.txt"):
         results = open("./results.txt", "x")
         results.write("# Experiment settings\n")
-        results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, max epochs, max dimension, max curvature, learning rate, patience\n")
+        results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, model, max epochs, max dimension, max curvature, learning rate, patience\n")
         results.write("# Trial settings\n")
         results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio, prune epoch\n")
     else:
@@ -392,7 +392,7 @@ def train(args):
     # write experiment settings
     results.write(str(best_mrr) + ", " + str(best_overall_valid_metrics["MR"]) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
     str(best_overall_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
-    str(defArgs.hpoSampler) + ", " + str(defArgs.hpoTrials) + ", " + str(defArgs.dataset) + ", " + str(defArgs.max_epochs) + ", " + 
+    str(defArgs.hpoSampler) + ", " + str(defArgs.hpoTrials) + ", " + str(defArgs.dataset) + ", " + str(defArgs.model) + ", " + str(defArgs.max_epochs) + ", " + 
     str(defArgs.rank) + ", " + str(defArgs.curv) + ", " + str(defArgs.learning_rate) + ", " + str(defArgs.patience) + "\n")
         
     results.write(trialResults)
