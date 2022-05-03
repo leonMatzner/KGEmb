@@ -38,7 +38,7 @@ class BaseM(KGModel):
         elif self.model == "euclidean":
             self.embed_manifold = geo.Euclidean(ndim=1)
         elif self.model == "hyperbolic":
-            self.embed_manifold = geo.PoincareBall(learnable=True)
+            self.embed_manifold = geo.PoincareBall(self.curv)
         elif self.model == "mixed":
             # For working with the Product manifold
             # All components present
