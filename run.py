@@ -180,17 +180,6 @@ def train(args):
 
     # default args
     defArgs = copy(args)
-    
-    # get results file
-    if not os.path.isfile("./results.txt"):
-        results = open("./results.txt", "x")
-        results.write("# Experiment settings\n")
-        results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, model, max epochs, max dimension, max curvature, learning rate, patience\n")
-        results.write("# Trial settings\n")
-        results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio, prune epoch\n")
-    else:
-        results = open("results.txt", "a")
-    
 
     def train_model():
         nonlocal step
@@ -388,6 +377,16 @@ def train(args):
         
     # execute HPO
     study.optimize(objective, n_trials=args.hpoTrials, gc_after_trial=True, n_jobs=1)
+
+    # get results file
+    if not os.path.isfile("./results.txt"):
+        results = open("./results.txt", "x")
+        results.write("# Experiment settings\n")
+        results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, model, max epochs, max dimension, max curvature, learning rate, patience\n")
+        results.write("# Trial settings\n")
+        results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio, prune epoch\n")
+    else:
+        results = open("results.txt", "a")
 
     # write experiment settings
     results.write(str(best_mrr) + ", " + str(best_overall_valid_metrics["MR"]) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
