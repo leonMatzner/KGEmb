@@ -210,7 +210,7 @@ def train(args):
         valid_loss = optimizer.calculate_valid_loss(valid_examples)
         #logging.info("\t Epoch {} | average valid loss: {:.4f}".format(step, valid_loss))
 
-        if (step + 1) % args.valid == 0 or best_valid_loss == None or valid_loss < best_valid_loss:
+        if (step + 1) % args.valid == 0 or best_valid_loss == None:
             valid_metrics = avg_both(*model.compute_metrics(valid_examples, filters))
             #logging.info(format_metrics(valid_metrics, split="valid"))
 
