@@ -197,8 +197,14 @@ class KGModel(nn.Module, ABC):
         mean_rank = {}
         mean_reciprocal_rank = {}
         hits_at = {}
+        
+        relation = {}
+        per_relation_mean_rank = {}
+        per_relation_mean_reciprocal_rank = {}
+        per_relation_hits_at = {}
 
         for m in ["rhs", "lhs"]:
+            # TODO: relation grouping (for WordNet)
             q = examples.clone()
             if m == "lhs":
                 tmp = torch.clone(q[:, 0])
@@ -212,5 +218,27 @@ class KGModel(nn.Module, ABC):
                 lambda x: torch.mean((ranks <= x).float()).item(),
                 (1, 3, 10)
             ))))
-
-        return mean_rank, mean_reciprocal_rank, hits_at
+            
+        # per relation evaluation
+        highest_relation = torch.max(examples[:,1])
+        if highest_relation < 25:
+            for i in range(highest_relation):
+                relation[str(i)] = str(i+1)
+                for m in ["rhs", "lhs"]:
+                    # TODO: relation grouping (for WordNet)
+                    q_unfiltered = examples.clone()
+                    q = q_unfiltered[q_unfiltered[:, 1] == (i+1)]
+                    if m == "lhs":
+                        tmp = torch.clone(q[:, 0])
+                        q[:, 0] = q[:, 2]
+                        q[:, 2] = tmp
+                        q[:, 1] += self.sizes[1] // 2
+                    ranks = self.get_ranking(q, filters[m], batch_size=batch_size)
+                    per_relation_mean_rank[m+str(i+1)] = torch.mean(ranks).item()
+                    per_relation_mean_reciprocal_rank[m+str(i+1)] = torch.mean(1. / ranks).item()
+                    per_relation_hits_at[m+str(i+1)] = torch.FloatTensor((list(map(
+                        lambda x: torch.mean((ranks <= x).float()).item(),
+                        (1, 3, 10)
+                    ))))
+            
+        return mean_rank, mean_reciprocal_rank, hits_at, relation, per_relation_mean_rank, per_relation_mean_reciprocal_rank, per_relation_hits_at

@@ -15,7 +15,7 @@ def get_savedir(model, dataset):
     return save_dir
 
 
-def avg_both(mrs, mrrs, hits):
+def avg_both(mrs, mrrs, hits, relation, per_rel_mrs = None, per_rel_mrrs = None, per_rel_hits = None):
     """Aggregate metrics for missing lhs and rhs.
 
     Args:
@@ -29,7 +29,19 @@ def avg_both(mrs, mrrs, hits):
     mr = (mrs['lhs'] + mrs['rhs']) / 2.
     mrr = (mrrs['lhs'] + mrrs['rhs']) / 2.
     h = (hits['lhs'] + hits['rhs']) / 2.
-    return {'MR': mr, 'MRR': mrr, 'hits@[1,3,10]': h}
+    h = (hits['lhs'] + hits['rhs']) / 2.
+
+    per_rel_mr = {}
+    per_rel_mrr = {}
+    per_rel_h = {}
+
+    # per relation eval
+    for rel in relation:
+        per_rel_mr[relation[rel]] = (per_rel_mrs['lhs' + relation[rel]] + per_rel_mrs['rhs' + relation[rel]]) / 2.
+        per_rel_mrr[relation[rel]] = (per_rel_mrrs['lhs' + relation[rel]] + per_rel_mrrs['rhs' + relation[rel]]) / 2.
+        per_rel_h[relation[rel]] = (per_rel_hits['lhs' + relation[rel]] + per_rel_hits['rhs' + relation[rel]]) / 2.
+
+    return {'MR': mr, 'MRR': mrr, 'hits@[1,3,10]': h, 'relation': relation, 'prMR': per_rel_mr, 'prMRR': per_rel_mrr, 'prHits@[1,3,10]': per_rel_h}
 
 
 def format_metrics(metrics, split):

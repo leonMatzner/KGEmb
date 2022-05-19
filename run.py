@@ -176,7 +176,6 @@ def train(args):
     best_overall_valid_metrics = None
     best_trial_valid_metrics = None
     trialResults = ""
-    best_valid_loss = None
 
     # default args
     defArgs = copy(args)
@@ -203,22 +202,18 @@ def train(args):
         nonlocal model
         nonlocal optimizer
         nonlocal valid_metrics
-        nonlocal best_valid_loss
 
         # Valid step
         model.eval()
         valid_loss = optimizer.calculate_valid_loss(valid_examples)
         #logging.info("\t Epoch {} | average valid loss: {:.4f}".format(step, valid_loss))
 
-        if (step + 1) % args.valid == 0 or best_valid_loss == None:
+        if (step + 1) % args.valid == 0:
             valid_metrics = avg_both(*model.compute_metrics(valid_examples, filters))
             #logging.info(format_metrics(valid_metrics, split="valid"))
 
             valid_mrr = valid_metrics["MRR"]
             
-            best_valid_loss = valid_loss
-
-
     def objective(trial):
         nonlocal best_mrr
         nonlocal step
@@ -234,16 +229,13 @@ def train(args):
         nonlocal best_overall_valid_metrics
         nonlocal trialResults
         nonlocal best_trial_valid_metrics
-        nonlocal best_valid_loss
 
         valid_mrr = 0
         best_mrr = 0
-        best_trial_valid_metrics = None
-        best_valid_loss = None
 
         # set params
         # Exponential sampling
-        args.rank = int(round(pow(2, trial.suggest_float("args.rank", math.log(16, 2), math.log(defArgs.rank, 2))), 0))
+        args.rank = int(round(pow(2, trial.suggest_float("args.rank", math.log(8, 2), math.log(defArgs.rank, 2))), 0))
         if defArgs.model != "mixed" and defArgs.model != "euclidean":
             args.curv = round(trial.suggest_float("args.curv", 0, defArgs.curv), 4)
         # Exponential sampling
@@ -259,6 +251,12 @@ def train(args):
             args.sphericalCurv = round(trial.suggest_float("args.sphericalCurv", 0, defArgs.curv), 4)
             args.non_euclidean_ratio = round(trial.suggest_float("args.non_euclidean_ratio", 0, 1), 4)
             args.hyperbolic_ratio = round(trial.suggest_float("args.hyperbolic_ratio", 0, 1), 4)
+            
+        # TODO: remove hardcoded args
+        #args.rank = 32
+        #args.curv = 1
+        #args.learning_rate = 0.1
+        #non_euclidean_optimizer = "RiemannianAdam"
         
         # create model
         model = getattr(models, args.model)(args)
@@ -290,9 +288,9 @@ def train(args):
             
             if not best_mrr or valid_mrr > best_mrr:
                 best_mrr = valid_mrr
-                if best_overall_valid_metrics == None or best_mrr < best_overall_valid_metrics["MRR"]:
+                if best_overall_valid_metrics == None or best_mrr > best_overall_valid_metrics["MRR"]:
                     best_overall_valid_metrics = copy(valid_metrics)
-                if best_trial_valid_metrics == None or best_mrr < best_trial_valid_metrics["MRR"]:
+                if best_trial_valid_metrics == None or best_mrr > best_trial_valid_metrics["MRR"]:
                     best_trial_valid_metrics = copy(valid_metrics)
                 counter = 0
                 best_epoch = step
@@ -308,7 +306,7 @@ def train(args):
             if trial.should_prune():
                 print("Pruned at step: " + str(step))
                 if defArgs.model == "mixed":
-                    trialResults += ("+ " + str(best_mrr) + ", " + 
+                    trialResults += ("+ " + str(best_trial_valid_metrics["MRR"]) + ", " + 
                     str(best_trial_valid_metrics["MR"]) + ", " + 
                     str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
                     str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + 
@@ -322,15 +320,37 @@ def train(args):
                     str(args.non_euclidean_ratio) + ", " + 
                     str(args.hyperbolic_ratio) + ", " + 
                     str(step) + "\n")
+
+                    for rel in best_trial_valid_metrics["relation"]:
+                        trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                        str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                        str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
+                        str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
+                        str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][2].item()) + "\n")
+                            
                 else:
-                    trialResults += ("+ " + str(best_mrr) + ", " + str(best_trial_valid_metrics["MR"]) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
-                    str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
-                    str(args.rank) + ", " + str(args.curv) + ", " + str(args.optimizer) + ", " + str(args.learning_rate) + ", -, -, -, -, " + str(step) + "\n")
+                    trialResults += ("+ " + str(best_trial_valid_metrics["MRR"]) + ", " + 
+                    str(best_trial_valid_metrics["MR"]) + ", " + 
+                    str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+                    str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + 
+                    str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
+                    str(args.rank) + ", " + 
+                    str(args.curv) + ", " + 
+                    str(args.optimizer) + ", " + 
+                    str(args.learning_rate) + ", -, -, -, -, " + 
+                    str(step) + "\n")
+
+                    for rel in best_trial_valid_metrics["relation"]:
+                        trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                        str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                        str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
+                        str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
+                        str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][2].item()) + "\n")
                 raise optuna.TrialPruned()
         
         # append trial results to trialResults
         if defArgs.model == "mixed":
-            trialResults += ("+ " + str(best_mrr) + ", " + 
+            trialResults += ("+ " + str(best_trial_valid_metrics["MRR"]) + ", " + 
             str(best_trial_valid_metrics["MR"]) + ", " + 
             str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
             str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + 
@@ -343,17 +363,36 @@ def train(args):
             str(args.sphericalCurv) + ", " + 
             str(args.non_euclidean_ratio) + ", " + 
             str(args.hyperbolic_ratio) + ", -\n")
+
+            for rel in best_trial_valid_metrics["relation"]:
+                trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
+                str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
+                str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][2].item()) + "\n")
         else:
-            trialResults += ("+ " + str(best_mrr) + ", " + str(best_trial_valid_metrics["MR"]) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
-            str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
-            str(args.rank) + ", " + str(args.curv) + ", " + str(args.optimizer) + ", " + str(args.learning_rate) + ", -, -, -, -, -\n")
+            trialResults += ("+ " + str(best_trial_valid_metrics["MRR"]) + ", " + 
+            str(best_trial_valid_metrics["MR"]) + ", " + 
+            str(best_trial_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+            str(best_trial_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + 
+            str(best_trial_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
+            str(args.rank) + ", " + 
+            str(args.curv) + ", " + 
+            str(args.optimizer) + ", " + 
+            str(args.learning_rate) + ", -, -, -, -, -\n")
+            for rel in best_trial_valid_metrics["relation"]:
+                trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
+                str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
+                str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][2].item()) + "\n")
         return best_mrr
 
     # Select sampler
     if defArgs.hpoSampler == "grid":
         search_space = {}
         if defArgs.model == "mixed":
-            search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank,2)], "args.curv": [0, defArgs.curv], 
+            search_space = {"args.rank": [math.log(8, 2), math.log(defArgs.rank,2)], "args.curv": [0, defArgs.curv], 
             "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"],
             "args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.sphericalCurv": [0, defArgs.sphericalCurv], 
             "args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
@@ -361,7 +400,7 @@ def train(args):
             #"args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
             #search_space = {"args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
         elif defArgs.model == "euclidean":
-            search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank, 2)], 
+            search_space = {"args.rank": [math.log(8, 2), math.log(defArgs.rank, 2)], 
             "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
         else:
             search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank, 2)], "args.curv": [0, defArgs.curv], 
@@ -385,6 +424,8 @@ def train(args):
         results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, model, max epochs, max dimension, max curvature, learning rate, patience\n")
         results.write("# Trial settings\n")
         results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio, prune epoch\n")
+        results.write("# Per relation metrics")
+        results.write("# - relation, MRR, MR, hits@1, hits@3, hits@10")
     else:
         results = open("results.txt", "a")
 
@@ -400,7 +441,8 @@ def train(args):
 
     #logging.info("\t Optimization finished")
     if not best_mrr:
-        torch.save(model.cpu().state_dict(), os.path.join(save_dir, "model.pt"))
+        #torch.save(model.cpu().state_dict(), os.path.join(save_dir, "model.pt"))
+        pass
     else:
         # disabled since HPO interveres
         pass

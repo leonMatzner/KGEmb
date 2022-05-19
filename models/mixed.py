@@ -4,6 +4,8 @@ import torch
 import geoopt as geo
 from torch import nn
 
+import time
+
 import math
 
 from models.base import KGModel
@@ -22,6 +24,7 @@ class BaseM(KGModel):
         initEntityData = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
         initRelData = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
         self.curv = args.curv
+        self.curv = 0
 
         # initialize signature
         if args.model == "mixed":
@@ -76,6 +79,9 @@ class BaseM(KGModel):
         # Project points onto the manifold
         self.entity.weight.data = self.embed_manifold.projx(initEntityData)
         self.rel.weight.data = self.embed_manifold.projx(initRelData)
+
+        self.entity.weight.data = initEntityData
+        self.rel.weight.data = initRelData
             
     def get_rhs(self, queries, eval_mode):
         """Get embeddings and biases of target entities."""
@@ -89,6 +95,7 @@ class BaseM(KGModel):
         device = lhs_e.device
         if(eval_mode):
             # create empty tensor, which will later be iteratively filled
+            #startTime = time.time()
             score = torch.empty((len([1 for i in lhs_e]), len([ 1 for i in rhs_e])), dtype=self.data_type, device=device)
             i = 0
             for coordinate in lhs_e:
@@ -96,11 +103,20 @@ class BaseM(KGModel):
                 scoreRow = - self.embed_manifold.dist2(rhs_e, coordinate)
                 score[i] = scoreRow
                 i = i + 1
+            #print("EVAL time")
+            #print(time.time() - startTime)
         else:
+            #startTime = time.time()
             # Score is the negative squared euclidean distance 
             score = - self.embed_manifold.dist2(lhs_e, rhs_e)
             # Reshape to recover the second dimension, which gets dropped by torch.sum (from torch.size([500]) to torch.size([500,1]))
             score = torch.reshape(score, (len([1 for i in lhs_e]), 1))
+            #print("NON-EVAL time")
+            #print(time.time() - startTime)
+            #print("LHS:")
+            #print(lhs_e)
+            #print("RHS")
+            #print(rhs_e)
         return score
         
 class euclidean(BaseM):
