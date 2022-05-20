@@ -242,8 +242,9 @@ def train(args):
         args.learning_rate = round(pow(2, trial.suggest_float("args.learning_rate", math.log(0.0001, 2), math.log(defArgs.learning_rate, 2))), 10)
         #non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
         #"RiemannianSGD"])
-        non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
-        "RiemannianSGD"])
+        #non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
+        #"RiemannianSGD"])
+        non_euclidean_optimizer = "RiemannianAdam"
         
         if defArgs.model == "mixed":
             args.curv = 4
@@ -253,10 +254,9 @@ def train(args):
             args.hyperbolic_ratio = round(trial.suggest_float("args.hyperbolic_ratio", 0, 1), 4)
             
         # TODO: remove hardcoded args
-        #args.rank = 32
-        #args.curv = 1
-        #args.learning_rate = 0.1
-        #non_euclidean_optimizer = "RiemannianAdam"
+        args.rank = 32
+        args.curv = 1
+        args.learning_rate = 0.1
         
         # create model
         model = getattr(models, args.model)(args)
@@ -322,7 +322,8 @@ def train(args):
                     str(step) + "\n")
 
                     for rel in best_trial_valid_metrics["relation"]:
-                        trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                        trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
+                        str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                         str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                         str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
                         str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
@@ -341,7 +342,8 @@ def train(args):
                     str(step) + "\n")
 
                     for rel in best_trial_valid_metrics["relation"]:
-                        trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                        trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
+                        str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                         str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                         str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
                         str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
@@ -365,7 +367,8 @@ def train(args):
             str(args.hyperbolic_ratio) + ", -\n")
 
             for rel in best_trial_valid_metrics["relation"]:
-                trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
+                str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                 str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                 str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
                 str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
@@ -381,7 +384,8 @@ def train(args):
             str(args.optimizer) + ", " + 
             str(args.learning_rate) + ", -, -, -, -, -\n")
             for rel in best_trial_valid_metrics["relation"]:
-                trialResults += ("- " + str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
+                trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
+                str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                 str(best_trial_valid_metrics["prMR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
                 str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][0].item()) + ", " + 
                 str(best_trial_valid_metrics["prHits@[1,3,10]"][best_trial_valid_metrics["relation"][rel]][1].item()) + ", " + 
@@ -393,7 +397,7 @@ def train(args):
         search_space = {}
         if defArgs.model == "mixed":
             search_space = {"args.rank": [math.log(8, 2), math.log(defArgs.rank,2)], "args.curv": [0, defArgs.curv], 
-            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"],
+            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)],
             "args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.sphericalCurv": [0, defArgs.sphericalCurv], 
             "args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
             #search_space = {"args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.sphericalCurv": [0, defArgs.sphericalCurv], 
@@ -401,10 +405,10 @@ def train(args):
             #search_space = {"args.hyperbolicCurv": [0, defArgs.hyperbolicCurv], "args.non_euclidean_ratio": [0, 1], "args.hyperbolic_ratio": [0, 1]}
         elif defArgs.model == "euclidean":
             search_space = {"args.rank": [math.log(8, 2), math.log(defArgs.rank, 2)], 
-            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
+            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)]}
         else:
             search_space = {"args.rank": [math.log(16, 2), math.log(defArgs.rank, 2)], "args.curv": [0, defArgs.curv], 
-            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)], "non_euclidean_optimizer": ["RiemannianAdam", "RiemannianLineSearch", "RiemannianSGD"]}
+            "args.learning_rate": [math.log(0.0001, 2), math.log(defArgs.learning_rate, 2)]}
         study = optuna.create_study(direction="maximize", sampler=optuna.samplers.GridSampler(search_space), 
         pruner=optuna.pruners.SuccessiveHalvingPruner(reduction_factor=2, min_resource=5, min_early_stopping_rate=1))
     elif defArgs.hpoSampler == "rand":

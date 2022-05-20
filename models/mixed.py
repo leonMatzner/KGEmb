@@ -77,8 +77,8 @@ class BaseM(KGModel):
                     (geo.SphereProjection(self.sCurv), self.sDims))
 
         # Project points onto the manifold
-        self.entity.weight.data = self.embed_manifold.projx(initEntityData)
-        self.rel.weight.data = self.embed_manifold.projx(initRelData)
+        #self.entity.weight.data = self.embed_manifold.projx(initEntityData)
+        #self.rel.weight.data = self.embed_manifold.projx(initRelData)
 
         self.entity.weight.data = initEntityData
         self.rel.weight.data = initRelData
