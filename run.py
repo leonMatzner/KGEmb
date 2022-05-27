@@ -55,7 +55,7 @@ parser.add_argument(
     "--patience", default=10, type=int, help="Number of epochs before early stopping"
 )
 parser.add_argument(
-    "--valid", default=4, type=float, help="Number of epochs before validation"
+    "--valid", default=5, type=float, help="Number of epochs before validation"
 )
 parser.add_argument(
     "--rank", default=16, type=int, help="Embedding dimension"
@@ -230,8 +230,10 @@ def train(args):
         nonlocal trialResults
         nonlocal best_trial_valid_metrics
 
+        best_trial_valid_metrics = None
         valid_mrr = 0
         best_mrr = 0
+        epoch_results = ""
 
         # set params
         # Exponential sampling
@@ -254,9 +256,9 @@ def train(args):
             args.hyperbolic_ratio = round(trial.suggest_float("args.hyperbolic_ratio", 0, 1), 4)
             
         # TODO: remove hardcoded args
-        args.rank = 32
-        args.curv = 1
-        args.learning_rate = 0.1
+        #args.rank = 32
+        #args.curv = 1
+        #args.learning_rate = 0.1
         
         # create model
         model = getattr(models, args.model)(args)
@@ -299,6 +301,15 @@ def train(args):
                 # replace model.cuda() with model.cpu() in order to use the cpu
                 #model.cuda()
 
+            if (step + 1) % args.valid == 0 and valid_metrics != None:
+                epoch_results += ("++ " + str(step) + ", " + 
+                str(valid_metrics["MRR"]) + ", " +
+                str(valid_metrics["MR"]) + ", " +
+                str(valid_metrics["hits@[1,3,10]"][0].item()) + ", " +
+                str(valid_metrics["hits@[1,3,10]"][1].item()) + ", " +
+                str(valid_metrics["hits@[1,3,10]"][2].item()) + "\n" 
+                )
+
             # HPO pruner
             if step % 1 == 0:
                 trial.report(best_mrr, step)
@@ -320,6 +331,8 @@ def train(args):
                     str(args.non_euclidean_ratio) + ", " + 
                     str(args.hyperbolic_ratio) + ", " + 
                     str(step) + "\n")
+                    
+                    trialResults += epoch_results
 
                     for rel in best_trial_valid_metrics["relation"]:
                         trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
@@ -340,6 +353,8 @@ def train(args):
                     str(args.optimizer) + ", " + 
                     str(args.learning_rate) + ", -, -, -, -, " + 
                     str(step) + "\n")
+                    
+                    trialResults += epoch_results
 
                     for rel in best_trial_valid_metrics["relation"]:
                         trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
@@ -365,6 +380,8 @@ def train(args):
             str(args.sphericalCurv) + ", " + 
             str(args.non_euclidean_ratio) + ", " + 
             str(args.hyperbolic_ratio) + ", -\n")
+                    
+            trialResults += epoch_results
 
             for rel in best_trial_valid_metrics["relation"]:
                 trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
@@ -383,6 +400,9 @@ def train(args):
             str(args.curv) + ", " + 
             str(args.optimizer) + ", " + 
             str(args.learning_rate) + ", -, -, -, -, -\n")
+                    
+            trialResults += epoch_results
+
             for rel in best_trial_valid_metrics["relation"]:
                 trialResults += ("- " + str(best_trial_valid_metrics["relation"][rel]) + ", " +
                 str(best_trial_valid_metrics["prMRR"][best_trial_valid_metrics["relation"][rel]]) + ", " + 
@@ -428,13 +448,15 @@ def train(args):
         results.write("# MRR, MR, hits@1, hits@3, hits@10, Sampler, number of trials, dataset, model, max epochs, max dimension, max curvature, learning rate, patience\n")
         results.write("# Trial settings\n")
         results.write("# + MRR, MR, hits@1, hits@3, hits@10, dimension, curvature, optimizer, learning rate, hyperbolic curvature, spherical curvature, non euclidean ratio, hyperbolic ratio, prune epoch\n")
-        results.write("# Per relation metrics")
-        results.write("# - relation, MRR, MR, hits@1, hits@3, hits@10")
+        results.write("# Epoch reports\n")
+        results.write("# ++ epoch, MRR, MR, hits@1, hits@3, hits@10\n")
+        results.write("# Per relation metrics\n")
+        results.write("# - relation, MRR, MR, hits@1, hits@3, hits@10\n")
     else:
         results = open("results.txt", "a")
 
     # write experiment settings
-    results.write(str(best_mrr) + ", " + str(best_overall_valid_metrics["MR"]) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
+    results.write(str(best_overall_valid_metrics["MRR"]) + ", " + str(best_overall_valid_metrics["MR"]) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][0].item()) + ", " + 
     str(best_overall_valid_metrics["hits@[1,3,10]"][1].item()) + ", " + str(best_overall_valid_metrics["hits@[1,3,10]"][2].item()) + ", " + 
     str(defArgs.hpoSampler) + ", " + str(defArgs.hpoTrials) + ", " + str(defArgs.dataset) + ", " + str(defArgs.model) + ", " + str(defArgs.max_epochs) + ", " + 
     str(defArgs.rank) + ", " + str(defArgs.curv) + ", " + str(defArgs.learning_rate) + ", " + str(defArgs.patience) + "\n")
