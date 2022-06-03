@@ -258,7 +258,7 @@ def train(args):
         # TODO: remove hardcoded args
         #args.rank = 32
         #args.curv = 1
-        #args.learning_rate = 0.1
+        #args.learning_rate = 0.05
         
         # create model
         model = getattr(models, args.model)(args)
