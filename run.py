@@ -237,21 +237,26 @@ def train(args):
 
         # set params
         # Exponential sampling
-        args.rank = int(round(pow(2, trial.suggest_float("args.rank", math.log(8, 2), math.log(defArgs.rank, 2))), 0))
-        if defArgs.model != "mixed" and defArgs.model != "euclidean":
-            args.curv = round(trial.suggest_float("args.curv", 0, defArgs.curv), 4)
+        # Set to true for big hpo run
+        if False:
+            args.rank = int(round(pow(2, trial.suggest_float("args.rank", math.log(8, 2), math.log(defArgs.rank, 2))), 0))
+        #if defArgs.model != "mixed" and defArgs.model != "euclidean":
+            #args.curv = round(trial.suggest_float("args.curv", 0, defArgs.curv), 4)
         # Exponential sampling
-        args.learning_rate = round(pow(2, trial.suggest_float("args.learning_rate", math.log(0.0001, 2), math.log(defArgs.learning_rate, 2))), 10)
+        #args.learning_rate = round(pow(2, trial.suggest_float("args.learning_rate", math.log(0.0001, 2), math.log(defArgs.learning_rate, 2))), 10)
         #non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
         #"RiemannianSGD"])
         #non_euclidean_optimizer = trial.suggest_categorical("non_euclidean_optimizer", ["RiemannianAdam", "RiemannianLineSearch", 
         #"RiemannianSGD"])
-        non_euclidean_optimizer = "RiemannianAdam"
+        if defArgs.model == "TransHyp":
+            non_euclidean_optimizer = "RiemannianAdam"
         
         if defArgs.model == "mixed":
             args.curv = 4
-            args.hyperbolicCurv = round(trial.suggest_float("args.hyperbolicCurv", 0, defArgs.curv), 4)
-            args.sphericalCurv = round(trial.suggest_float("args.sphericalCurv", 0, defArgs.curv), 4)
+            args.hyperbolicCurv = 4
+            args.sphericalCurv = 4
+            #args.hyperbolicCurv = round(trial.suggest_float("args.hyperbolicCurv", 0, defArgs.curv), 4)
+            #args.sphericalCurv = round(trial.suggest_float("args.sphericalCurv", 0, defArgs.curv), 4)
             args.non_euclidean_ratio = round(trial.suggest_float("args.non_euclidean_ratio", 0, 1), 4)
             args.hyperbolic_ratio = round(trial.suggest_float("args.hyperbolic_ratio", 0, 1), 4)
             
@@ -272,7 +277,7 @@ def train(args):
         regularizer = getattr(regularizers, args.regularizer)(args.reg)
         optim_method = getattr(torch.optim, args.optimizer)(model.parameters(), lr=args.learning_rate)
         # Set Riemannian Optimizer
-        if args.model == "hyperbolic" or args.model == "spheric" or args.model == "mixed" or args.model == "euclidean":
+        if args.model == "TransHyp":
             if str(non_euclidean_optimizer) == "RiemannianLineSearch":
                 optim_method.optimizer = getattr(geo.optim, str(non_euclidean_optimizer))(model.parameters())
             else:
@@ -282,6 +287,7 @@ def train(args):
 
         for step in range(args.max_epochs):
 
+            print("EPOCH: " + str(step))
             # Train step
             train_model()
             

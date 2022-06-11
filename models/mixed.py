@@ -34,11 +34,11 @@ class BaseM(KGModel):
 
         # defines the appropriate manifold
         if self.model == "spheric":
-            self.embed_manifold = geo.SphereProjection(self.curv)
+            self.embed_manifold = geo.SphereProjection(learnable=True)
         elif self.model == "euclidean":
             self.embed_manifold = geo.Euclidean(ndim=1)
         elif self.model == "hyperbolic":
-            self.embed_manifold = geo.PoincareBall(self.curv)
+            self.embed_manifold = geo.PoincareBall(learnable=True)
         elif self.model == "mixed":
             # For working with the Product manifold
             # All components present
@@ -76,13 +76,20 @@ class BaseM(KGModel):
         # Project points onto the manifold
         #self.entity.weight.data = self.embed_manifold.projx(initEntityData)
         #self.rel.weight.data = self.embed_manifold.projx(initRelData)
+        
+        # initialize diagonal relation matrix (see MuRP)
+        self.rel_diag = nn.Embedding(self.sizes[1], self.rank)
+        self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], self.rank), dtype=self.data_type) - 1.0
 
         # initialize entity and relation weights
         initEntityData = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
         initRelData = self.init_size * torch.randn((self.sizes[1], self.rank), dtype=self.data_type)
 
-        self.entity.weight.data = geo.ManifoldParameter(initEntityData, self.embed_manifold)
-        self.rel.weight.data = geo.ManifoldParameter(initRelData, self.embed_manifold)
+        self.entity.weight.data = initEntityData
+        self.rel.weight.data = initRelData
+        if self.model == "TransHyp":
+            self.entity.weight.data = geo.ManifoldParameter(initEntityData, self.embed_manifold)
+            self.rel.weight.data = geo.ManifoldParameter(initRelData, self.embed_manifold)
             
     def get_rhs(self, queries, eval_mode):
         """Get embeddings and biases of target entities."""
@@ -117,6 +124,8 @@ class euclidean(BaseM):
 
     def get_queries(self, queries):
         head = self.entity(queries[:, 0])
+        rel_diag_matrix = self.rel_diag(queries[:, 1])
+        head = head * rel_diag_matrix
         relation = self.rel(queries[:, 1])
         lhs_e = head + relation
         lhs_biases = self.bh(queries[:, 0])
@@ -127,12 +136,26 @@ class spheric(BaseM):
     
     def get_queries(self, queries):
         head = self.entity(queries[:, 0])
-        relation = self.rel(queries[:, 1])
+        rel_diag_matrix = self.rel_diag(queries[:, 1])
+        head = self.embed_manifold.expmap0(head * rel_diag_matrix)
+        relation = self.embed_manifold.expmap0(self.rel(queries[:, 1]))
         lhs_e = self.embed_manifold.mobius_add(head, relation)
         lhs_biases = self.bh(queries[:, 0])
         return lhs_e, lhs_biases
     
 class hyperbolic(BaseM):
+    """ Hyperbolic embedding """
+    
+    def get_queries(self, queries):
+        head = self.entity(queries[:, 0])
+        rel_diag_matrix = self.rel_diag(queries[:, 1])
+        head = self.embed_manifold.expmap0(head * rel_diag_matrix)
+        relation = self.embed_manifold.expmap0(self.rel(queries[:, 1]))
+        lhs_e = self.embed_manifold.mobius_add(head, relation)
+        lhs_biases = self.bh(queries[:, 0])
+        return lhs_e, lhs_biases
+
+class TransHyp(BaseM):
     """ Hyperbolic embedding """
     
     def get_queries(self, queries):
@@ -147,6 +170,9 @@ class mixed(BaseM):
     
     def get_queries(self, queries):
         head = self.entity(queries[:, 0])
+        rel_diag_matrix = self.rel_diag(queries[:, 1])
+        head = self.embed_manifold.expmap0(head * rel_diag_matrix)
+        #relation = self.embed_manifold.expmap0(self.rel(queries[:, 1]))
         relation = self.rel(queries[:, 1])
         # Translates the space components separately
         lhs_e_comps = []
