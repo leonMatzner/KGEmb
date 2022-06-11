@@ -79,7 +79,7 @@ parser.add_argument(
     "--gamma", default=0, type=float, help="Margin for distance-based losses"
 )
 parser.add_argument(
-    "--bias", default="constant", type=str, choices=["constant", "learn", "none"], help="Bias type (none for no bias)"
+    "--bias", default="learn", type=str, choices=["constant", "learn", "none"], help="Bias type (none for no bias)"
 )
 parser.add_argument(
     "--dtype", default="double", type=str, choices=["single", "double"], help="Machine precision"
