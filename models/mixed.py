@@ -25,6 +25,8 @@ class BaseM(KGModel):
 
         # initialize signature
         if args.model == "mixed":
+            #TODO remove manual ratio
+            args.non_euclidean_ratio = 0.5
             nonEuclideanDims = math.floor(args.rank * args.non_euclidean_ratio)
             self.sDims = math.floor(nonEuclideanDims * (1 - args.hyperbolic_ratio))
             self.sCurv = args.sphericalCurv
@@ -43,35 +45,38 @@ class BaseM(KGModel):
             # For working with the Product manifold
             # All components present
             if self.sDims > 0 and self.eDims > 0 and self.hDims > 0:
-                self.components = [("spheric", self.sCurv), ("euclidean", 0), ("hyperbolic", self.hCurv)]
-                self.embed_manifold = geo.ProductManifold(
-                    (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
+                #self.embed_manifold = geo.StereographicProductManifold(
+                #    (geo.SphereProjection(learnable=True), self.sDims), (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(learnable=True), self.hDims))
+                self.embed_manifold = geo.StereographicProductManifold(
+                    (geo.SphereProjection(learnable=True), self.sDims), (geo.PoincareBall(0), self.eDims), (geo.PoincareBall(learnable=True), self.hDims))
             # One component missing
             elif self.sDims == 0 and self.eDims > 0 and self.hDims > 0:
-                self.components = [("euclidean", 0), ("hyperbolic", self.hCurv)]
-                self.embed_manifold = geo.ProductManifold(
-                    (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(self.hCurv), self.hDims))
+                #self.embed_manifold = geo.StereographicProductManifold(
+                #    (geo.Euclidean(ndim=1), self.eDims), (geo.PoincareBall(learnable=True), self.hDims))
+                self.embed_manifold = geo.StereographicProductManifold(
+                    (geo.PoincareBall(0), self.eDims), (geo.PoincareBall(learnable=True), self.hDims))
             elif self.sDims > 0 and self.eDims == 0 and self.hDims > 0:
-                self.components = [("spheric", self.sCurv), ("hyperbolic", self.hCurv)]
-                self.embed_manifold = geo.ProductManifold(
-                    (geo.SphereProjection(self.sCurv), self.sDims), (geo.PoincareBall(self.hCurv), self.hDims))
+                self.embed_manifold = geo.StereographicProductManifold(
+                    (geo.SphereProjection(learnable=True), self.sDims), (geo.PoincareBall(learnable=True), self.hDims))
             elif self.sDims > 0 and self.eDims > 0 and self.hDims == 0:
-                self.components = [("spheric", self.sCurv), ("euclidean", 0)]
-                self.embed_manifold = geo.ProductManifold(
-                    (geo.SphereProjection(self.sCurv), self.sDims), (geo.Euclidean(ndim=1), self.eDims))
+                #self.embed_manifold = geo.StereographicProductManifold(
+                #    (geo.SphereProjection(learnable=True), self.sDims), (geo.Euclidean(ndim=1), self.eDims))
+                self.embed_manifold = geo.StereographicProductManifold(
+                    (geo.SphereProjection(learnable=True), self.sDims), (geo.PoincareBall(0), self.eDims))
             # Two components missing    
             elif self.sDims == 0 and self.eDims == 0 and self.hDims > 0:
-                self.components = [("hyperbolic", self.hCurv)]
-                self.embed_manifold = geo.ProductManifold(
-                    (geo.PoincareBall(self.hCurv), self.hDims))
+                #self.embed_manifold = geo.ProductManifold(
+                #    (geo.PoincareBall(self.hCurv), self.hDims))
+                self.embed_manifold = geo.StereographicProductManifold(
+                    (geo.PoincareBall(learnable=True), self.hDims))
             elif self.sDims == 0 and self.eDims > 0 and self.hDims == 0:
-                self.components = [("euclidean", 0)]
-                self.embed_manifold = geo.ProductManifold(
-                    (geo.Euclidean(ndim=1), self.eDims))
+                #self.embed_manifold = geo.StereographicProductManifold(
+                #    (geo.Euclidean(ndim=1), self.eDims))
+                self.embed_manifold = geo.StereographicProductManifold(
+                    (geo.PoincareBall(0), self.eDims))
             elif self.sDims > 0 and self.eDims == 0 and self.hDims == 0:
-                self.components = [("spheric", self.sCurv)]
-                self.embed_manifold = geo.ProductManifold(
-                    (geo.SphereProjection(self.sCurv), self.sDims))
+                self.embed_manifold = geo.StereographicProductManifold(
+                    (geo.SphereProjection(learnable=True), self.sDims))
 
         # Project points onto the manifold
         #self.entity.weight.data = self.embed_manifold.projx(initEntityData)
@@ -79,7 +84,11 @@ class BaseM(KGModel):
         
         # initialize diagonal relation matrix (see MuRP)
         self.rel_diag = nn.Embedding(self.sizes[1], self.rank)
+        #self.rel_diag = nn.Embedding(self.sizes[1], 1)
+        #self.rel_diag = nn.Embedding(self.sizes[1], 1)
         self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], self.rank), dtype=self.data_type) - 1.0
+        #self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], 1), dtype=self.data_type) - 1.0
+        #self.rel_diag.weight.data = 2 * torch.rand((self.sizes[1], 1), dtype=self.data_type) - 1.0
 
         # initialize entity and relation weights
         initEntityData = self.init_size * torch.randn((self.sizes[0], self.rank), dtype=self.data_type)
@@ -148,6 +157,7 @@ class hyperbolic(BaseM):
     
     def get_queries(self, queries):
         head = self.entity(queries[:, 0])
+        #rel_diag_matrix = torch.block_diag(self.rel_diag(queries[:, 1]))
         rel_diag_matrix = self.rel_diag(queries[:, 1])
         head = self.embed_manifold.expmap0(head * rel_diag_matrix)
         relation = self.embed_manifold.expmap0(self.rel(queries[:, 1]))
@@ -170,11 +180,51 @@ class mixed(BaseM):
     
     def get_queries(self, queries):
         head = self.entity(queries[:, 0])
-        rel_diag_matrix = self.rel_diag(queries[:, 1])
-        head = self.embed_manifold.expmap0(head * rel_diag_matrix)
+        #rel_diag_matrix = self.rel_diag(queries[:, 1])
         #relation = self.embed_manifold.expmap0(self.rel(queries[:, 1]))
+        rel_diag_matrix = self.rel_diag(queries[:, 1])
+        relation = self.rel(queries[:, 1])
+
+        head = self.embed_manifold.expmap(torch.zeros(head.size(), device=head.device), head * rel_diag_matrix)
+        relation = self.embed_manifold.expmap(torch.zeros(relation.size(), device=head.device), relation)
+
+        lhs_e = self.embed_manifold.mobius_add(head, relation)
+        lhs_biases = self.bh(queries[:, 0])
+        return lhs_e, lhs_biases
+
+class mixed_old(BaseM):
+    """ Mixed embedding """
+    
+    def get_queries(self, queries):
+        head = self.entity(queries[:, 0])
+        #rel_diag_matrix = self.rel_diag(queries[:, 1])
+        #head = self.embed_manifold.expmap0(head * rel_diag_matrix)
+        #relation = self.embed_manifold.expmap0(self.rel(queries[:, 1]))
+        rel_diag_matrix = self.rel_diag(queries[:, 1])
         relation = self.rel(queries[:, 1])
         # Translates the space components separately
+        head_comps = []
+        rel_comps = []
+        for i in range(len(self.components)):
+            head_comp = self.embed_manifold.take_submanifold_value(head, i)
+            rel_comp = self.embed_manifold.take_submanifold_value(relation, i)
+            #print(self.components[i][1])
+            #print(self.components)
+            #print(self.embed_manifold.manifolds)
+            
+            if self.components[i][0] == "spheric":
+                head_comps.append(geo.SphereProjection(self.components[i][1]).expmap0(head_comp))
+                rel_comps.append(geo.SphereProjection(self.components[i][1]).expmap0(rel_comp))
+            elif self.components[i][0] == "euclidean":
+                head_comps.append(head_comp)
+                rel_comps.append(rel_comp)
+            elif self.components[i][0] == "hyperbolic":
+                head_comps.append(geo.PoincareBall(self.components[i][1]).expmap0(head_comp))
+                rel_comps.append(geo.PoincareBall(self.components[i][1]).expmap0(rel_comp))
+
+        head = torch.cat([head_comps[i] for i in range(len(head_comps))], 1)
+        relation = torch.cat([rel_comps[i] for i in range(len(rel_comps))], 1)
+
         lhs_e_comps = []
         for i in range(len(self.components)):
             headComp = self.embed_manifold.take_submanifold_value(head, i)
